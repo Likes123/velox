@@ -241,18 +241,22 @@ void Spiller::spill(
     auto rowsLeft = container_.numRows();
     auto spaceLeft = container_.stringAllocator().retainedSize() -
         container_.stringAllocator().freeSpace();
+    // 如果 rowsLeft != 0，或者使用内存已经达标
     if (!rowsLeft || (rowsLeft <= targetRows && spaceLeft < targetBytes)) {
       return;
     }
+    // todo？
     if (!pendingSpillPartitions_.empty()) {
       advanceSpill(std::numeric_limits<uint64_t>::max());
       if (!pendingSpillPartitions_.empty()) {
         continue;
       }
     }
+    // todo?
     if (doneFullSweep) {
       return;
     }
+    // 循环创建SpillRun，直到maxPartitions
     for (auto newPartition = spillRuns_.size();
          newPartition < state_.maxPartitions();
          ++newPartition) {
@@ -262,10 +266,11 @@ void Spiller::spill(
     iterator.reset();
     if (fillSpillRuns(
             iterator,
-            targetBytes < state_.targetFileSize() ? RowContainer::kUnlimited
+            targetBytes < state_.targetFileSize() ? RowContainer::kUnlimited // todo?
                                                   : state_.targetFileSize())) {
-      // Arrived at end of the container. Add more spilled ranges if any left.
+      /// Arrived at end of the container. Add more spilled ranges if any left.
       if (state_.numPartitions() < state_.maxPartitions()) {
+        // 啥情况会走到这？ 前面会一直循环创建SpillRun，直到maxPartitions？
         state_.setNumPartitions(state_.numPartitions() + 1);
       } else {
         doneFullSweep = startedFullSweep;
@@ -317,6 +322,7 @@ bool Spiller::fillSpillRuns(
   std::vector<char*> rows(kHashBatchSize);
   int64_t numConsidered = 0;
   for (;;) {
+    // 从container中批量获取数据，存储rows中
     auto numRows = container_.listRows(
         &iterator, rows.size(), RowContainer::kUnlimited, rows.data());
     numConsidered += numRows;
@@ -330,6 +336,7 @@ bool Spiller::fillSpillRuns(
     // Put each in its run.
     for (auto i = 0; i < numRows; ++i) {
       auto partition = bits_.partition(hashes[i], spillRuns_.size());
+      // 如果对应的Partition超过了spillRun
       if (partition == -1) {
         if (rowsFromNonSpillingPartitions) {
           rowsFromNonSpillingPartitions->push_back(rows[i]);
@@ -341,13 +348,16 @@ bool Spiller::fillSpillRuns(
     }
     // The final phase goes through the whole container and makes runs for all
     // non-empty spilling partitions.
+    // todo?
     if (final && numRows) {
       continue;
     }
     bool anyStarted = false;
     for (auto i = 0; i < spillRuns_.size(); ++i) {
       auto& run = spillRuns_[i];
+      // 超过targetSize
       if (!run.rows.empty() && (run.numBytes > targetSize || final)) {
+        // 满足Spill条件的SpillRun，挂在pendingSpillPartitions_下面
         pendingSpillPartitions_.insert(i);
         anyStarted = true;
       }
@@ -361,6 +371,7 @@ bool Spiller::fillSpillRuns(
         // to cover the ask.
         std::vector<int32_t> indices(spillRuns_.size());
         std::iota(indices.begin(), indices.end(), 0);
+        // 对SpillRun的内存消耗排序
         std::sort(
             indices.begin(), indices.end(), [&](int32_t left, int32_t right) {
               return spillRuns_[left].numBytes > spillRuns_[right].numBytes;

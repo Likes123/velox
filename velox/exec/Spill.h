@@ -263,6 +263,7 @@ class SpillFileList {
   // must produce a view where the rows are sorted if sorting is desired.
   // Consecutive calls must have sorted data so that the first row of the
   // next call is not less than the last row of the previous call.
+  // indices类似一个二维数组，每一个元素又是一个Range，表示一个连续的区间
   void write(
       const RowVectorPtr& rows,
       const folly::Range<IndexRange*>& indices);
@@ -345,6 +346,7 @@ class SpillState {
   // sorted for a sorted spill and must hash to 'partition'. It is
   // safe to call this on multiple threads if all threads specify a
   // different partition.
+  // index?
   void appendToPartition(int32_t partition, const RowVectorPtr& rows);
 
   // Finishes a sorted run for 'partition'. If write is called for 'partition'
@@ -357,6 +359,7 @@ class SpillState {
   // Starts reading values for 'partition'. If 'extra' is non-null, it can be
   // a stream of rows from a RowContainer so as to merge unspilled
   // data with spilled data.
+  // extra 是指没有spill的数据，也就是内存中的数据
   std::unique_ptr<TreeOfLosers<SpillStream>> startMerge(
       int32_t partition,
       std::unique_ptr<SpillStream>&& extra);
@@ -368,16 +371,23 @@ class SpillState {
   int64_t spilledBytes() const;
 
  private:
+  // Type of the content.
   const RowTypePtr type_;
+  // File system path prefix.
   const std::string path_;
+  // Maximum number of partitions.
   const int32_t maxPartitions_;
+  // 'numSortingKeys' is the number of leading columns on which the data is sorted,
+  // 0 if only hash partitioning is used.
   const int32_t numSortingKeys_;
   // Number of currently spilling partitions.
   int32_t numPartitions_ = 0;
+  // Target size of a single file.
   const uint64_t targetFileSize_;
   // A file list for each spilled partition. Only partitions that have
   // started spilling have an entry here.
   std::vector<std::unique_ptr<SpillFileList>> files_;
+  // todo? pool和mappedMemory的区别
   memory::MemoryPool& pool_;
   memory::MappedMemory& mappedMemory_;
 };

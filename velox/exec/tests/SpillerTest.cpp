@@ -28,6 +28,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
     std::vector<char*> rows(kNumRows);
     RowVectorPtr batch;
     auto data = makeSpillData(kNumRows, rows, batch);
+    // 每一行都有一个对应的hash值
     std::vector<uint64_t> hashes(kNumRows);
     auto keys = data->keyTypes();
     // Calculate a hash for every key in 'rows'.
@@ -37,11 +38,15 @@ class SpillerTest : public exec::test::RowContainerTestBase {
     }
 
     // We divide the rows in 4 partitions according to 2 low bits of the hash.
+    // 选用2的次幂，为的是可以直接&，计算hash值
     std::vector<std::vector<int32_t>> partitions(4);
+    // 因为分成4个Partition，所以hash值的后两位只能是00,01,10,11，也就是&3
     for (auto i = 0; i < kNumRows; ++i) {
+      // partition中存的是RowContainer中的行号
       partitions[hashes[i] & 3].push_back(i);
     }
 
+    // 这里的Sort是为了后面验证Merge的正确与否，不是Spill的必要条件
     // We sort the rows in each partition in key order.
     for (auto& partition : partitions) {
       std::sort(
@@ -58,7 +63,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
         *data,
         [&](folly::Range<char**> rows) { data->eraseRows(rows); },
         std::static_pointer_cast<const RowType>(batch->type()),
-        HashBitRange(0, 2),
+        HashBitRange(0, 2), // 暗示了分成4个Partition
         keys.size(),
         makeError ? "/bad/path" : tempDirectory->path,
         2000000,
@@ -70,6 +75,7 @@ class SpillerTest : public exec::test::RowContainerTestBase {
 
     RowContainerIterator iter;
 
+    // 一次spill 10%的数据，一共spill spillPct%的数据
     // We spill spillPct% of the data in 10% increments.
     auto initialBytes = data->allocatedBytes();
     auto initialRows = data->numRows();
@@ -98,12 +104,17 @@ class SpillerTest : public exec::test::RowContainerTestBase {
       if (!spiller->isSpilled(partitionIndex)) {
         continue;
       }
+
+      // Spiller merge的作用，将一个Partition下的多个spill文件和RowContainer中的数据合并成一个有序的流
       // We make a merge reader that merges the spill files and the rows that
       // are still in the RowContainer.
+      // merge最后一个Partition
+      // merge是指merge一个Partition下的多个spillFile和RowContainer中的数据，不涉及Partition之间
       auto merge = spiller->startMerge(partitionIndex);
 
       // We read the spilled data back and check that it matches the sorted
       // order of the partition.
+      // 取最后一个Partition
       auto& indices = partitions[partitionIndex];
       for (auto i = 0; i < indices.size(); ++i) {
         auto stream = merge->next();
@@ -117,6 +128,8 @@ class SpillerTest : public exec::test::RowContainerTestBase {
       }
     }
   }
+
+  // 返回一个拥有各种类型的数据的RowContainer，用于测试Spill
   std::unique_ptr<RowContainer> makeSpillData(
       int32_t numRows,
       std::vector<char*>& rows,

@@ -72,9 +72,13 @@ class Spiller {
         pool_(pool),
         executor_(executor) {}
 
+  // 待Spill的数据存储在this中的container_中，通过iterator遍历
+  // Spill的目标是targetRows和targetBytes，targetBytes是指Spill变成数据的VarcharBuffer大小
   // Spills rows from 'this' until there are under 'targetRows' rows
   // and 'targetBytes' of allocated variable length space in
-  // use. 'iterator' should be at the start of 'container_' on first
+  // use.
+
+  // 'iterator' should be at the start of 'container_' on first
   // call.  spill() starts with one spill partition and initializes
   // more spill partitions as needed to hit the size target. If there
   // is no more data to spill in one hash partition, it starts spilling
@@ -144,6 +148,7 @@ class Spiller {
   std::unique_ptr<SpillStream> spillStreamOverRows(int32_t partition);
 
  private:
+  // todo: !!!
   // Represents a run of rows from a spillable partition of
   // a RowContainer. Rows that hash to the same partition are accumulated here
   // and sorted in the case of sorted spilling. The run is then
@@ -207,13 +212,18 @@ class Spiller {
   // Writes out  and erases rows marked for spilling.
   void advanceSpill(uint64_t maxBytes);
 
+  // 存储待Spill的数据
   RowContainer& container_;
+  // Erases rows from 'container_'.
   const RowContainer::Eraser eraser_;
   RowTypePtr rowType_;
+  // 用于从Hash值截取Partition
   const HashBitRange bits_;
+  // 一个算子维护一个，维护了所有Partition的Spill数据
   SpillState state_;
 
   // One spill run for each partition of spillable data.
+  // 维护每个Partition待Spill的数据
   std::vector<SpillRun> spillRuns_;
 
   // Indices into 'spillRuns_' that are currently getting spilled.
@@ -223,6 +233,7 @@ class Spiller {
   // that one can start reading these back. This means that the rows
   // that are not written out and deleted will be captured by
   // spillStreamOverRows().
+  // todo??
   bool spillFinalized_{false};
   memory::MemoryPool& pool_;
   folly::Executor* const executor_;

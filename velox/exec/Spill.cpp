@@ -157,7 +157,9 @@ void SpillState::appendToPartition(
   }
 
   IndexRange range{0, rows->size()};
-  files_[partition]->write(rows, folly::Range<IndexRange*>(&range, 1));
+  // write的indices类似一个二维数组，[[0,rows->size()]]
+  // todo? 什么时候size > 1?
+  files_[partition]->write(rows, folly::Range<IndexRange*>(&range, 1)); // ??
 }
 
 std::unique_ptr<TreeOfLosers<SpillStream>> SpillState::startMerge(
@@ -171,6 +173,7 @@ std::unique_ptr<TreeOfLosers<SpillStream>> SpillState::startMerge(
     file->startRead();
     result.push_back(std::move(file));
   }
+  // 这里直接使用extra，说明此时的extra已经Partition过了
   if (extra) {
     result.push_back(std::move(extra));
   }

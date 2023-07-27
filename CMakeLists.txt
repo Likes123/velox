@@ -215,6 +215,7 @@ find_package(
   atomic)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 
+include_directories("/deps/include")
 # Range-v3 will be enable when the codegen code actually lands keeping it here
 # for reference. find_package(range-v3)
 

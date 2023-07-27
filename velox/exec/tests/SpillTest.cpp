@@ -59,9 +59,11 @@ TEST_F(SpillTest, spillState) {
   EXPECT_EQ(2, state.maxPartitions());
   state.setNumPartitions(2);
   for (auto partition = 0; partition < state.maxPartitions(); ++partition) {
+    // 每个Partition下10个Vector，每个Vector有10000个元素 ？？
     for (auto batch = 0; batch < 10; ++batch) {
-      // We add a sorted run in two pieces: 1, 11, 21,,, followed by 100001 ,
-      // 100011, 100021   etc. where the last digit is the batch number. Each
+      // We add a sorted run in two pieces: 1, 11, 21,,,
+      /// followed by 100001 , 100011, 100021  每一个batch加入两个Vector，第二个+100000
+      // etc. where the last digit is the batch number. Each
       // sorted run has 20000 rows.
       state.appendToPartition(
           partition,
@@ -72,6 +74,7 @@ TEST_F(SpillTest, spillState) {
           partition,
           makeRowVector({makeFlatVector<int64_t>(
               10000, [&](auto row) { return row * 10 + batch + 100000; })}));
+      // ?
       // Indicates that the next additions to 'partition' are not sorted with
       // respect to the values added so far.
       state.finishWrite(partition);
