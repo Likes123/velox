@@ -735,6 +735,8 @@ uint64_t BaseVector::estimateFlatSize() const {
 
   auto leaf = wrappedVector();
   VELOX_DCHECK_GT(leaf->size(), 0);
+  // 计算出wrapped的平均行大小，然后乘以length_，得到转换成Flat后的大小
+  // 参看FlatVector::retainedSize()，包括了StringBuffer的大小
   auto avgRowSize = 1.0 * leaf->retainedSize() / leaf->size();
   return length_ * avgRowSize;
 }

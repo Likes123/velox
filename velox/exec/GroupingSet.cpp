@@ -584,6 +584,7 @@ bool GroupingSet::getOutputWithSpill(const RowVectorPtr& result) {
     nonSpilledRows_ = spiller_->finishSpill();
   }
 
+  // 指向nonSpilledRows_的索引
   if (nonSpilledIndex_ < nonSpilledRows_.value().size()) {
     uint64_t bytes = 0;
     vector_size_t numGroups = 0;

@@ -195,6 +195,8 @@ class SpillerTest : public exec::test::RowContainerTestBase,
       dependents.insert(
           dependents.end(), childTypes.begin() + numKeys, childTypes.end());
     }
+
+    // ??
     // Make non-join build container so that spill runs are sorted. Note
     // that a distinct or group by hash table can have dependents if
     // some keys are known to be unique by themselves. Aggregation

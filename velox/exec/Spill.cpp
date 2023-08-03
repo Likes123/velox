@@ -65,6 +65,7 @@ void SpillFile::startRead() {
   nextBatch();
 }
 
+// 分批从SpillFile中读取数据
 void SpillFile::nextBatch() {
   index_ = 0;
   if (input_->atEnd()) {
@@ -79,8 +80,10 @@ WriteFile& SpillFileList::currentOutput() {
   if (files_.empty() || !files_.back()->isWritable() ||
       files_.back()->size() > targetFileSize_ * 1.5) {
     if (!files_.empty() && files_.back()->isWritable()) {
+      // 最后一个文件可以写入，但是大小已经超过了targetFileSize_ * 1.5，先结束掉
       files_.back()->finishWrite();
     }
+    // 创建新的SpillFile
     files_.push_back(std::make_unique<SpillFile>(
         type_,
         numSortingKeys_,
@@ -88,16 +91,20 @@ WriteFile& SpillFileList::currentOutput() {
         fmt::format("{}-{}", path_, files_.size()),
         pool_));
   }
+  // 可能是新创建的SpillFile，也可能是已经存在的SpillFile
   return files_.back()->output();
 }
 
 void SpillFileList::flush() {
+  // batch_用于序列化
   if (batch_) {
+    // 将序列化的数据写入到out
     IOBufOutputStream out(
         mappedMemory_, nullptr, std::max<int64_t>(64 * 1024, batch_->size()));
     batch_->flush(&out);
     batch_.reset();
     auto iobuf = out.getIOBuf();
+    // 获取SpillFile，可能新建，也可能复用之前的，将out中的数据写入到SpillFile
     auto& file = currentOutput();
     for (auto& range : *iobuf) {
       file.append(std::string_view(
@@ -109,6 +116,7 @@ void SpillFileList::flush() {
 void SpillFileList::write(
     const RowVectorPtr& rows,
     const folly::Range<IndexRange*>& indices) {
+  // batch_用于序列化，没有则创建
   if (!batch_) {
     batch_ = std::make_unique<VectorStreamGroup>(&mappedMemory_);
     batch_->createStreamTree(
@@ -116,10 +124,12 @@ void SpillFileList::write(
   }
   batch_->append(rows, indices);
 
+  // 将batch_中的数据写入到SpillFile
   flush();
 }
 
 void SpillFileList::finishFile() {
+  // 每一次write完就会flush，这里不需要?
   flush();
   if (files_.empty()) {
     return;
@@ -176,6 +186,7 @@ std::unique_ptr<TreeOfLosers<SpillStream>> SpillState::startMerge(
     std::unique_ptr<SpillStream>&& extra) {
   VELOX_CHECK_LT(partition, files_.size());
   std::vector<std::unique_ptr<SpillStream>> result;
+  // 给定Partition下的每一个SpillFile作为多路归并的一路
   if (auto list = std::move(files_[partition]); list) {
     for (auto& file : list->files()) {
       file->startRead();
@@ -183,6 +194,7 @@ std::unique_ptr<TreeOfLosers<SpillStream>> SpillState::startMerge(
     }
   }
   VELOX_DCHECK_EQ(!result.empty(), isPartitionSpilled(partition));
+  // extra是内存中没有落盘的数据
   if (extra != nullptr) {
     result.push_back(std::move(extra));
   }
@@ -190,6 +202,7 @@ std::unique_ptr<TreeOfLosers<SpillStream>> SpillState::startMerge(
   if (FOLLY_UNLIKELY(result.empty())) {
     return nullptr;
   }
+  // 使用败者树进行归并
   return std::make_unique<TreeOfLosers<SpillStream>>(std::move(result));
 }
 

@@ -128,22 +128,30 @@ void OrderBy::addInput(RowVectorPtr input) {
 
 void OrderBy::ensureInputFits(const RowVectorPtr& input) {
   // Check if spilling is enabled or not.
+  // 构造的时候根据config判断是否创建
   if (!spillPath_.has_value()) {
     return;
   }
 
+  // todo：只会Spill现有的data_（RowContainer）中的数据，不会直接Spill input（如有可能，
+  //  input加入data_，下一次Spill）所以，当data_为空，一定不会Spill，直接返回
   const int64_t numRows = data_->numRows();
   if (numRows == 0) {
     // 'data_' is empty. Nothing to spill.
     return;
   }
   auto [freeRows, outOfLineFreeBytes] = data_->freeSpace();
+  // 非线性内存，只存储Varchar的StringBuffer
+  // outOfLineBytes是data_已经使用的非线性内存大小
   const auto outOfLineBytes =
       data_->stringAllocator().retainedSize() - outOfLineFreeBytes;
   const int64_t outOfLineBytesPerRow = outOfLineBytes / numRows;
+  // 对于DictionaryVector，得到转换成Flat后的近似内存大小
+  // 包括了StringBuffer的大小
   const int64_t flatInputBytes = input->estimateFlatSize();
 
   // Test-only spill path.
+  // testSpillPct_在测试的时候控制百分之N的数据进行落盘，这样在少数据量的情况下也可以Spill
   if (numRows > 0 && testSpillPct_ &&
       (folly::hasher<uint64_t>()(++spillTestCounter_)) % 100 <= testSpillPct_) {
     const int64_t rowsToSpill = std::max<int64_t>(1, numRows / 10);
@@ -154,6 +162,8 @@ void OrderBy::ensureInputFits(const RowVectorPtr& input) {
   }
 
   if (freeRows > input->size() &&
+      // outOfLineBytes是已经使用非线性内存大小，== 0说明没有Varchar
+      // todo： 这里的比较不是很精确，outOfLineFreeBytes是StringBuffer的估算值，flatInputBytes包括了StringBuffer和values_的内存大小
       (outOfLineBytes == 0 || outOfLineFreeBytes >= flatInputBytes)) {
     // Enough free rows for input rows and enough variable length free
     // space for the flat size of the whole vector. If outOfLineBytes
@@ -163,12 +173,15 @@ void OrderBy::ensureInputFits(const RowVectorPtr& input) {
 
   // If there is variable length data we take the flat size of the input as a
   // cap on the new variable length data needed.
+  // 计算RowContainer data_增长input->size()所需要的内存大小
+  // RowContainer本身是有一定的free，increment是减去free后的
   const int64_t incrementBytes =
       data_->sizeIncrement(input->size(), outOfLineBytes ? flatInputBytes : 0);
 
   auto tracker = mappedMemory_->tracker();
   VELOX_CHECK_NOT_NULL(tracker);
   // There must be at least 2x the increment in reservation.
+  // 如果可用的reserve内存大于增长的2倍，不需要Spill
   if (tracker->getAvailableReservation() > 2 * incrementBytes) {
     return;
   }
@@ -179,9 +192,11 @@ void OrderBy::ensureInputFits(const RowVectorPtr& input) {
   const auto targetIncrementBytes = std::max<int64_t>(
       incrementBytes * 2,
       tracker->getCurrentUserBytes() * spillableReservationGrowthPct_ / 100);
+  // 尝试从reserve memory
   if (tracker->maybeReserve(targetIncrementBytes)) {
     return;
   }
+  // 估算Spill的行数，key满足targetIncrementBytes
   const int64_t rowsToSpill = std::max<int64_t>(
       1, targetIncrementBytes / (data_->fixedRowSize() + outOfLineBytesPerRow));
   spill(
@@ -245,11 +260,13 @@ void OrderBy::noMoreInput() {
 
   } else {
     // Finish spill, and we shouldn't get any rows from non-spilled partition as
-    // there is only one hash partition for orderBy operator.
+    /// there is only one hash partition for orderBy operator. 所以不应该有non-spilled partition
     Spiller::SpillRows nonSpilledRows = spiller_->finishSpill();
     VELOX_CHECK(nonSpilledRows.empty());
     VELOX_CHECK_NULL(spillMerge_);
 
+    // Order by只有一个Partition
+    // Merge一个Partition下的所有SpillFile
     spillMerge_ = spiller_->startMerge(0);
     spillSources_.resize(outputBatchSize_);
     spillSourceRows_.resize(outputBatchSize_);

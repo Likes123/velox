@@ -265,6 +265,7 @@ class Spiller {
   // that one can start reading these back. This means that the rows
   // that are not written out and deleted will be captured by
   // spillStreamOverRows().
+  // todo？？？
   bool spillFinalized_{false};
   memory::MemoryPool& pool_;
   folly::Executor* const executor_;

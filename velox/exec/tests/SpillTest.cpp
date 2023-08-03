@@ -251,7 +251,7 @@ TEST_F(SpillTest, spillState) {
   spillStateTest(1'000'000'000, 2, 10, 1, {CompareFlags{false, false}}, 2 * 10);
   spillStateTest(1'000'000'000, 2, 10, 1, {}, 2 * 10);
 
-  // Test with duplicate sort keys.
+  // Test with duplicate sort keys.  numDuplicates is set to 10 to trigger
   spillStateTest(1'000'000'000, 2, 10, 10, {CompareFlags{true, true}}, 2 * 10);
   spillStateTest(1'000'000'000, 2, 10, 10, {CompareFlags{true, false}}, 2 * 10);
   spillStateTest(1'000'000'000, 2, 10, 10, {CompareFlags{false, true}}, 2 * 10);

@@ -115,6 +115,8 @@ void MemoryUsageTracker::decrementUsage(UsageType type, int64_t size) noexcept {
   usage(currentUsageInBytes_, type).fetch_sub(size);
 }
 
+// todo ??
+// memory Manager相关
 bool MemoryUsageTracker::maybeReserve(int64_t increment) {
   constexpr int32_t kGrowthQuantum = 8 << 20;
   auto addedReservation = bits::roundUp(increment, kGrowthQuantum);

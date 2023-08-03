@@ -89,7 +89,7 @@ class OrderBy : public Operator {
   // Filesystem path for spill files, empty if spilling is disabled.
   const std::optional<std::string> spillPath_;
 
-  // Executor for spilling. If nullptr spilling writes on the Driver's thread.
+  /// Executor for spilling. If nullptr spilling writes on the Driver's thread.
   folly::Executor* FOLLY_NULLABLE const spillExecutor_;
 
   // Percentage of input batches to be spilled for testing. 0 means no spilling
